@@ -6,9 +6,10 @@ function BrandLogo({
   return (
     <div className="flex items-center gap-3">
       <img
-        src="/medical__logo.png"
+        src="/logo.png"
         alt="Online Medical System Logo"
         className={`${logoSize} object-contain transition-transform duration-300 hover:scale-105`}
+        onError={(e) => console.log("Logo failed to load from:", e.target.src)}
       />
       {showTitle && (
         <div>
