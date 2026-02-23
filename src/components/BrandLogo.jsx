@@ -1,12 +1,23 @@
-function BrandLogo({ titleClassName = 'text-3xl font-extrabold tracking-wide text-white' }) {
+function BrandLogo({ 
+  titleClassName = 'text-2xl font-extrabold tracking-wide text-slate-900',
+  logoSize = 'h-12 w-auto',
+  showTitle = true 
+}) {
   return (
     <div className="flex items-center gap-3">
       <img
         src="/medical-logo.png"
-        alt="Online Medical System logo"
-        className="logo-eco-motion h-11 w-11 rounded-xl border border-white/40 bg-white/20 p-1 shadow-sm backdrop-blur-sm"
+        alt="Online Medical System Logo"
+        className={`${logoSize} object-contain transition-transform duration-300 hover:scale-105`}
       />
-      <span className={`${titleClassName} logo-title-shimmer logo-title-unique`}>Online Medical System</span>
+      {showTitle && (
+        <div>
+          <h1 className={titleClassName}>
+            Online <span className="text-blue-500">Medical</span>
+          </h1>
+          <p className="text-xs text-slate-500 font-medium">Healthcare Platform</p>
+        </div>
+      )}
     </div>
   );
 }
