@@ -1,6 +1,9 @@
 function StatusPill({ value }) {
   const styleByValue = {
     Booked: 'bg-blue-100 text-blue-700',
+    Pending: 'bg-amber-100 text-amber-700',
+    Approved: 'bg-blue-100 text-blue-700',
+    Rejected: 'bg-rose-100 text-rose-700',
     Completed: 'bg-emerald-100 text-emerald-700',
     'Pending Fulfillment': 'bg-amber-100 text-amber-700',
     Dispensed: 'bg-emerald-100 text-emerald-700',

@@ -1,1 +1,24 @@
 
+.registration-form-large h3 {
+	font-size: 1.5rem;
+	font-weight: 700;
+}
+
+.registration-form-large label {
+	font-size: 1rem;
+	font-weight: 700;
+}
+
+.registration-form-large input,
+.registration-form-large select,
+.registration-form-large textarea {
+	font-size: 1.05rem;
+	font-weight: 600;
+}
+
+.registration-form-large input::placeholder,
+.registration-form-large textarea::placeholder {
+	font-size: 1rem;
+	font-weight: 500;
+}
+
