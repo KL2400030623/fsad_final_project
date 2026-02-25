@@ -83,12 +83,12 @@ function ContactPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-emerald-50 py-12">
-      <div className="mx-auto max-w-7xl px-4 md:px-8 space-y-16">
+      <div className="mx-auto max-w-7xl px-6 lg:px-8 space-y-20">
         
         {/* Header */}
-        <section className="space-y-6 pt-12">
-          <h1 className="text-5xl md:text-6xl font-bold text-slate-900">Contact Us</h1>
-          <p className="text-xl text-slate-600 max-w-2xl">
+        <section className="space-y-4 pt-12">
+          <h1 className="text-4xl md:text-5xl font-bold text-slate-900">Contact Us</h1>
+          <p className="text-lg text-slate-600 max-w-4xl">
             Have questions? We're here to help. Reach out through any of our convenient channels.
           </p>
         </section>
@@ -96,20 +96,20 @@ function ContactPage() {
         {/* Contact Methods Grid */}
         <section className="grid md:grid-cols-4 gap-6">
           {contactMethods.map((method, idx) => (
-            <div key={idx} className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm hover:shadow-lg transition">
-              <div className="text-5xl mb-4">{method.icon}</div>
-              <h3 className="text-lg font-bold text-slate-900 mb-2">{method.title}</h3>
-              <p className="font-semibold text-slate-800 mb-1">{method.description}</p>
-              <p className="text-sm text-slate-600">{method.detail}</p>
+            <div key={idx} className="bg-white border-2 border-slate-200 rounded-xl p-6 shadow-md hover:shadow-xl transition">
+              <div className="text-4xl mb-4">{method.icon}</div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">{method.title}</h3>
+              <p className="font-semibold text-slate-800 text-lg mb-1">{method.description}</p>
+              <p className="text-slate-600 text-lg">{method.detail}</p>
             </div>
           ))}
         </section>
 
         {/* Contact Form Section */}
-        <section className="grid md:grid-cols-2 gap-12 border-t border-slate-200 pt-12">
+        <section className="grid md:grid-cols-2 gap-10 border-t border-slate-200 pt-12">
           <div>
-            <h2 className="text-3xl font-bold text-slate-900 mb-4">Send us a Message</h2>
-            <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm">
+            <h2 className="text-2xl font-bold text-slate-900 mb-4">Send us a Message</h2>
+            <div className="bg-white border-2 border-slate-200 rounded-xl p-6 shadow-md">
               {submitSuccess && (
                 <div className="mb-6 bg-emerald-100 border border-emerald-300 text-emerald-800 px-4 py-3 rounded-lg">
                   ✓ Thank you! We'll get back to you soon.

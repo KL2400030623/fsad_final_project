@@ -16,7 +16,6 @@ Each staff member has their own unique login credentials. When logged in, users 
 
 #### Dr. Maya Patel
 - **Email:** maya.patel@medical.com
-- **Password:** maya123
 - **Access:** Only sees appointments assigned to Dr. Maya Patel
 
 #### Dr. John Smith
@@ -53,24 +52,6 @@ Each staff member has their own unique login credentials. When logged in, users 
 - **Email:** david.lee@medical.com
 - **Password:** david123
 - **Access:** Only sees appointments assigned to Dr. David Lee
-
-#### Pending Approval Accounts
-*These accounts exist but require admin approval before they can log in*
-
-##### Dr. James Wilson (Pending)
-- **Email:** james.wilson@medical.com
-- **Password:** james123
-- **Status:** Pending Admin Approval
-
-##### Dr. Maria Garcia (Pending)
-- **Email:** maria.garcia@medical.com
-- **Password:** maria123
-- **Status:** Pending Admin Approval
-
-##### Pharm. David Park (Pending)
-- **Email:** david.park@medical.com
-- **Password:** park123
-- **Status:** Pending Admin Approval
 
 ---
 

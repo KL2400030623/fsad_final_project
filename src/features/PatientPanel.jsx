@@ -1,18 +1,20 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Section from '../components/Section';
 import StatusPill from '../components/StatusPill';
+import PatientAvailableDoctors from './PatientAvailableDoctors';
 
 function PatientPanel({
   handleBookAppointment,
   bookingForm,
   setBookingForm,
-  doctors,
-  patientAppointments,
+  doctors = [],
+  patientAppointments = [],
   patientRecords,
-  patientLabs,
-  patientPrescriptions,
+  patientLabs = [],
+  patientPrescriptions = [],
 }) {
-  const [patientDetails, setPatientDetails] = useState({
+  const [activeSection, setActiveSection] = useState('dashboard');
+  const [patientDetails] = useState({
     fullName: 'Alice Brown',
     dateOfBirth: '1985-06-15',
     gender: 'Female',
@@ -24,398 +26,389 @@ function PatientPanel({
     insuranceNumber: 'HF-123456789',
   });
 
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [uploadedReports, setUploadedReports] = useState([]);
-  const [isUploading, setIsUploading] = useState(false);
+  // Reminders based on upcoming appointments
+  const reminders = useMemo(() => {
+    const today = new Date();
+    const upcoming = patientAppointments
+      .filter(apt => apt.status === 'Approved' || apt.status === 'Pending')
+      .map(apt => {
+        const aptDate = new Date(apt.date + 'T' + apt.time);
+        const daysUntil = Math.ceil((aptDate - today) / (1000 * 60 * 60 * 24));
+        return { ...apt, daysUntil, aptDate };
+      })
+      .filter(apt => apt.daysUntil >= 0 && apt.daysUntil <= 7)
+      .sort((a, b) => a.aptDate - b.aptDate);
+    return upcoming;
+  }, [patientAppointments]);
 
-  const handleSaveProfile = (e) => {
-    e.preventDefault();
-    setIsEditingProfile(false);
-    // In a real app, this would save to backend/localStorage
-    alert('Profile updated successfully!');
-  };
-
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    setIsUploading(true);
-
-    // Simulate file upload delay
-    setTimeout(() => {
-      const newReport = {
-        id: Date.now(),
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        uploadDate: new Date().toISOString().split('T')[0],
-        status: 'Pending Review',
-        url: URL.createObjectURL(file), // In real app, this would be a server URL
-      };
-
-      setUploadedReports(prev => [...prev, newReport]);
-      setIsUploading(false);
-      alert('Report uploaded successfully! It will be reviewed by your healthcare provider.');
-    }, 2000);
-  };
-
-  const handleDownloadReport = (report) => {
-    // In a real app, this would download from server
-    // For demo, we'll simulate download
-    const link = document.createElement('a');
-    link.href = report.url || '#';
-    link.download = report.name || `lab-report-${report.id}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // Handle booking from doctor search
+  const handleBookDoctor = (doctorName) => {
+    setBookingForm(prev => ({ ...prev, doctor: doctorName }));
+    setActiveSection('book');
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <Section 
-        title="Patient Profile" 
-        rightContent={
+    <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+      {/* Patient Sidebar */}
+      <aside className="rounded-2xl border-2 border-slate-200 bg-white p-5 shadow-lg h-fit">
+        <div className="text-center mb-6 pb-6 border-b border-slate-200">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 mx-auto mb-3 flex items-center justify-center text-white text-3xl font-bold shadow-lg">
+            {patientDetails.fullName.charAt(0)}
+          </div>
+          <h3 className="font-bold text-xl text-slate-900">{patientDetails.fullName}</h3>
+          <p className="text-sm text-slate-500">Patient ID: PT-001</p>
+        </div>
+        
+        <nav className="space-y-2">
           <button
-            type="button"
-            onClick={() => setIsEditingProfile(!isEditingProfile)}
-            className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+            onClick={() => setActiveSection('dashboard')}
+            className={`w-full text-left rounded-xl px-4 py-3 text-base font-medium transition ${
+              activeSection === 'dashboard'
+                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
           >
-            {isEditingProfile ? 'Cancel' : 'Edit Profile'}
+            🏠 Dashboard
           </button>
-        }
-      >
-        {isEditingProfile ? (
-          <form onSubmit={handleSaveProfile} className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-              <input
-                type="text"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                value={patientDetails.fullName}
-                onChange={(e) => setPatientDetails({ ...patientDetails, fullName: e.target.value })}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Date of Birth</label>
-                <input
-                  type="date"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                  value={patientDetails.dateOfBirth}
-                  onChange={(e) => setPatientDetails({ ...patientDetails, dateOfBirth: e.target.value })}
-                  required
-                />
+          <button
+            onClick={() => setActiveSection('find-doctor')}
+            className={`w-full text-left rounded-xl px-4 py-3 text-base font-medium transition ${
+              activeSection === 'find-doctor'
+                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            🔍 Find a Doctor
+          </button>
+          <button
+            onClick={() => setActiveSection('book')}
+            className={`w-full text-left rounded-xl px-4 py-3 text-base font-medium transition ${
+              activeSection === 'book'
+                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            📅 Book Appointment
+          </button>
+          <button
+            onClick={() => setActiveSection('appointments')}
+            className={`w-full text-left rounded-xl px-4 py-3 text-base font-medium transition ${
+              activeSection === 'appointments'
+                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            📋 My Appointments
+          </button>
+          <button
+            onClick={() => setActiveSection('records')}
+            className={`w-full text-left rounded-xl px-4 py-3 text-base font-medium transition ${
+              activeSection === 'records'
+                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            🏥 Medical Records
+          </button>
+          <button
+            onClick={() => setActiveSection('reminders')}
+            className={`w-full text-left rounded-xl px-4 py-3 text-base font-medium transition relative ${
+              activeSection === 'reminders'
+                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            🔔 Reminders
+            {reminders.length > 0 && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center">
+                {reminders.length}
+              </span>
+            )}
+          </button>
+        </nav>
+      </aside>
+
+      {/* Patient Content */}
+      <main className="space-y-6">
+        {/* Dashboard Section */}
+        {activeSection === 'dashboard' && (
+          <div className="space-y-6">
+            {/* Quick Stats */}
+            <div className="grid gap-4 md:grid-cols-4">
+              <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-5 text-white shadow-lg">
+                <p className="text-3xl font-black">{patientAppointments.length}</p>
+                <p className="text-blue-100">Total Appointments</p>
               </div>
+              <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 p-5 text-white shadow-lg">
+                <p className="text-3xl font-black">{patientAppointments.filter(a => a.status === 'Approved').length}</p>
+                <p className="text-emerald-100">Upcoming</p>
+              </div>
+              <div className="rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 p-5 text-white shadow-lg">
+                <p className="text-3xl font-black">{patientPrescriptions.length}</p>
+                <p className="text-amber-100">Prescriptions</p>
+              </div>
+              <div className="rounded-2xl bg-gradient-to-br from-purple-500 to-violet-600 p-5 text-white shadow-lg">
+                <p className="text-3xl font-black">{patientLabs.length}</p>
+                <p className="text-purple-100">Lab Reports</p>
+              </div>
+            </div>
+
+            {/* Upcoming Reminders Alert */}
+            {reminders.length > 0 && (
+              <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
+                <h3 className="font-bold text-lg text-amber-800 mb-3">🔔 Upcoming Appointments</h3>
+                <div className="space-y-2">
+                  {reminders.slice(0, 2).map((apt) => (
+                    <div key={apt.id} className="flex items-center justify-between bg-white rounded-xl p-4 border border-amber-200">
+                      <div>
+                        <p className="font-semibold text-slate-900">{apt.doctor}</p>
+                        <p className="text-sm text-slate-600">{apt.date} at {apt.time}</p>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                        apt.daysUntil === 0 ? 'bg-red-100 text-red-700' :
+                        apt.daysUntil === 1 ? 'bg-amber-100 text-amber-700' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>
+                        {apt.daysUntil === 0 ? 'Today!' : apt.daysUntil === 1 ? 'Tomorrow' : `In ${apt.daysUntil} days`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Patient Profile */}
+            <Section title={<span className="flex items-center gap-3"><span className="text-4xl">👤</span> Patient Profile</span>}>
+              <div className="grid md:grid-cols-2 gap-4 text-lg">
+                <p><span className="font-bold text-slate-900">Name:</span> {patientDetails.fullName}</p>
+                <p><span className="font-bold text-slate-900">Date of Birth:</span> {patientDetails.dateOfBirth}</p>
+                <p><span className="font-bold text-slate-900">Gender:</span> {patientDetails.gender}</p>
+                <p><span className="font-bold text-slate-900">Phone:</span> {patientDetails.phone}</p>
+                <p><span className="font-bold text-slate-900">Email:</span> {patientDetails.email}</p>
+                <p><span className="font-bold text-slate-900">Insurance:</span> {patientDetails.insuranceProvider}</p>
+              </div>
+            </Section>
+          </div>
+        )}
+
+        {/* Find Doctor Section */}
+        {activeSection === 'find-doctor' && (
+          <PatientAvailableDoctors onBookDoctor={handleBookDoctor} />
+        )}
+
+        {/* Book Appointment Section */}
+        {activeSection === 'book' && (
+          <Section title={<span className="flex items-center gap-3"><span className="text-5xl">📅</span> Book Virtual Appointment</span>}>
+            <form onSubmit={handleBookAppointment} className="space-y-5 max-w-xl">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Gender</label>
+                <label className="block text-lg font-semibold text-slate-700 mb-2">Select Doctor</label>
                 <select
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                  value={patientDetails.gender}
-                  onChange={(e) => setPatientDetails({ ...patientDetails, gender: e.target.value })}
-                  required
+                  className="w-full rounded-xl border-2 border-slate-300 px-5 py-4 text-lg font-medium focus:border-emerald-500 focus:outline-none transition-colors"
+                  value={bookingForm.doctor}
+                  onChange={(event) => setBookingForm((current) => ({ ...current, doctor: event.target.value }))}
                 >
-                  <option value="Female">Female</option>
-                  <option value="Male">Male</option>
-                  <option value="Other">Other</option>
-                  <option value="Prefer not to say">Prefer not to say</option>
+                  {doctors.map((doctor) => (
+                    <option key={doctor} value={doctor}>
+                      {doctor}
+                    </option>
+                  ))}
                 </select>
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
-                <input
-                  type="tel"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                  value={patientDetails.phone}
-                  onChange={(e) => setPatientDetails({ ...patientDetails, phone: e.target.value })}
-                  required
-                />
+                <label className="block text-lg font-semibold text-slate-700 mb-2">Date & Time</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <input
+                    type="date"
+                    className="rounded-xl border-2 border-slate-300 px-5 py-4 text-lg font-medium focus:border-emerald-500 focus:outline-none transition-colors"
+                    value={bookingForm.date}
+                    onChange={(event) => setBookingForm((current) => ({ ...current, date: event.target.value }))}
+                  />
+                  <input
+                    type="time"
+                    className="rounded-xl border-2 border-slate-300 px-5 py-4 text-lg font-medium focus:border-emerald-500 focus:outline-none transition-colors"
+                    value={bookingForm.time}
+                    onChange={(event) => setBookingForm((current) => ({ ...current, time: event.target.value }))}
+                  />
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                  value={patientDetails.email}
-                  onChange={(e) => setPatientDetails({ ...patientDetails, email: e.target.value })}
-                  required
+                <label className="block text-lg font-semibold text-slate-700 mb-2">Reason for Visit</label>
+                <textarea
+                  rows="3"
+                  className="w-full rounded-xl border-2 border-slate-300 px-5 py-4 text-lg focus:border-emerald-500 focus:outline-none transition-colors"
+                  placeholder="Describe your symptoms or reason for consultation..."
+                  value={bookingForm.reason}
+                  onChange={(event) => setBookingForm((current) => ({ ...current, reason: event.target.value }))}
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
-              <textarea
-                rows="2"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                value={patientDetails.address}
-                onChange={(e) => setPatientDetails({ ...patientDetails, address: e.target.value })}
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Emergency Contact</label>
-              <input
-                type="text"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                placeholder="Name - Phone (Relation)"
-                value={patientDetails.emergencyContact}
-                onChange={(e) => setPatientDetails({ ...patientDetails, emergencyContact: e.target.value })}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Insurance Provider</label>
-                <input
-                  type="text"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                  value={patientDetails.insuranceProvider}
-                  onChange={(e) => setPatientDetails({ ...patientDetails, insuranceProvider: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Insurance Number</label>
-                <input
-                  type="text"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                  value={patientDetails.insuranceNumber}
-                  onChange={(e) => setPatientDetails({ ...patientDetails, insuranceNumber: e.target.value })}
-                />
-              </div>
-            </div>
-            <button type="submit" className="rounded-lg bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700">
-              Save Profile
-            </button>
-          </form>
-        ) : (
-          <div className="space-y-2 text-sm">
-            <p><span className="font-semibold">Name:</span> {patientDetails.fullName}</p>
-            <p><span className="font-semibold">Date of Birth:</span> {patientDetails.dateOfBirth}</p>
-            <p><span className="font-semibold">Gender:</span> {patientDetails.gender}</p>
-            <p><span className="font-semibold">Phone:</span> {patientDetails.phone}</p>
-            <p><span className="font-semibold">Email:</span> {patientDetails.email}</p>
-            <p><span className="font-semibold">Address:</span> {patientDetails.address}</p>
-            <p><span className="font-semibold">Emergency Contact:</span> {patientDetails.emergencyContact}</p>
-            <p><span className="font-semibold">Insurance Provider:</span> {patientDetails.insuranceProvider}</p>
-            <p><span className="font-semibold">Insurance Number:</span> {patientDetails.insuranceNumber}</p>
-          </div>
+              <button type="submit" className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-lg font-bold text-white hover:shadow-lg hover:shadow-emerald-500/30 transition-all">
+                Book Appointment
+              </button>
+            </form>
+          </Section>
         )}
-      </Section>
-      <Section title="Book Virtual Appointment">
-        <form onSubmit={handleBookAppointment} className="space-y-3">
-          <select
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            value={bookingForm.doctor}
-            onChange={(event) => setBookingForm((current) => ({ ...current, doctor: event.target.value }))}
-          >
-            {doctors.map((doctor) => (
-              <option key={doctor} value={doctor}>
-                {doctor}
-              </option>
-            ))}
-          </select>
-          <div className="grid grid-cols-2 gap-3">
-            <input
-              type="date"
-              className="rounded-lg border border-slate-300 px-3 py-2"
-              value={bookingForm.date}
-              onChange={(event) => setBookingForm((current) => ({ ...current, date: event.target.value }))}
-            />
-            <input
-              type="time"
-              className="rounded-lg border border-slate-300 px-3 py-2"
-              value={bookingForm.time}
-              onChange={(event) => setBookingForm((current) => ({ ...current, time: event.target.value }))}
-            />
-          </div>
-          <textarea
-            rows="2"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            placeholder="Reason for consultation"
-            value={bookingForm.reason}
-            onChange={(event) => setBookingForm((current) => ({ ...current, reason: event.target.value }))}
-          />
-          <button type="submit" className="rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white">
-            Book Appointment
-          </button>
-        </form>
-      </Section>
 
-      <Section title="My Appointments">
-        <div className="space-y-3">
-          {patientAppointments.map((item) => (
-            <div key={item.id} className="rounded-lg border border-slate-200 p-3">
-              <div className="flex items-center justify-between">
-                <p className="font-medium">{item.doctor}</p>
-                <StatusPill value={item.status} />
-              </div>
-              <p className="text-sm text-slate-600">
-                {item.date} at {item.time}
-              </p>
-              <p className="text-sm text-slate-600">{item.reason}</p>
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      <Section title="Medical Record">
-        {patientRecords ? (
-          <div className="space-y-2 text-sm">
-            <p>
-              <span className="font-semibold">Blood Type:</span> {patientRecords.bloodType}
-            </p>
-            <p>
-              <span className="font-semibold">Allergies:</span> {patientRecords.allergies}
-            </p>
-            <p>
-              <span className="font-semibold">Conditions:</span> {patientRecords.conditions}
-            </p>
-            <p>
-              <span className="font-semibold">Last Visit:</span> {patientRecords.lastVisit}
-            </p>
-          </div>
-        ) : (
-          <p className="text-sm text-slate-600">No record found.</p>
-        )}
-      </Section>
-
-      <Section 
-        title="Lab Reports & Medical Records"
-        rightContent={
-          <div className="flex gap-2">
-            <label className="cursor-pointer rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 transition">
-              <span>{isUploading ? 'Uploading...' : '📤 Upload Report'}</span>
-              <input
-                type="file"
-                className="hidden"
-                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                onChange={handleFileUpload}
-                disabled={isUploading}
-              />
-            </label>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          {/* Official Lab Reports */}
-          <div>
-            <h4 className="text-sm font-semibold text-slate-700 mb-3">📋 Official Lab Reports</h4>
-            <div className="space-y-2">
-              {patientLabs.map((item) => (
-                <div key={item.id} className="rounded-lg border border-slate-200 p-3 bg-white">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{item.test}</p>
-                      <p className="text-sm text-slate-600">{item.date}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <StatusPill value={item.status} />
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadReport(item)}
-                        className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 transition"
-                        title="Download Report"
-                      >
-                        📥 Download
-                      </button>
-                    </div>
+        {/* My Appointments Section */}
+        {activeSection === 'appointments' && (
+          <Section title={<span className="flex items-center gap-3"><span className="text-5xl">📋</span> My Appointments</span>}>
+            <div className="space-y-4">
+              {patientAppointments.map((item) => (
+                <div key={item.id} className="rounded-2xl border-2 border-slate-200 p-5 hover:border-emerald-300 hover:shadow-md transition-all">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-bold text-xl text-slate-900">{item.doctor}</p>
+                    <StatusPill value={item.status} />
                   </div>
-                  <p className="text-sm text-slate-700 mt-2">{item.result}</p>
+                  <p className="text-lg text-slate-600">
+                    📅 {item.date} at {item.time}
+                  </p>
+                  <p className="text-lg text-slate-600">💬 {item.reason}</p>
+                  {item.status === 'Approved' && item.meetingLink && (
+                    <a 
+                      href={item.meetingLink} 
+                      className="inline-block mt-3 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition"
+                    >
+                      📹 Join Video Call
+                    </a>
+                  )}
                 </div>
               ))}
-              {patientLabs.length === 0 && (
-                <p className="text-sm text-slate-500 text-center py-4">No official lab reports available.</p>
+              {patientAppointments.length === 0 && (
+                <p className="text-lg text-slate-500 text-center py-8">No appointments scheduled.</p>
               )}
             </div>
-          </div>
+          </Section>
+        )}
 
-          {/* Uploaded Reports */}
-          {uploadedReports.length > 0 && (
-            <div>
-              <h4 className="text-sm font-semibold text-slate-700 mb-3">📤 My Uploaded Reports</h4>
-              <div className="space-y-2">
-                {uploadedReports.map((report) => (
-                  <div key={report.id} className="rounded-lg border border-slate-200 p-3 bg-blue-50">
+        {/* Medical Records Section */}
+        {activeSection === 'records' && (
+          <div className="space-y-6">
+            <Section title={<span className="flex items-center gap-3"><span className="text-5xl">🏥</span> Medical Record</span>}>
+              {patientRecords ? (
+                <div className="grid md:grid-cols-2 gap-4 text-lg">
+                  <div className="bg-red-50 rounded-xl p-4 border border-red-200">
+                    <p className="text-sm text-red-600 font-semibold">Blood Type</p>
+                    <p className="text-2xl font-bold text-red-700">{patientRecords.bloodType}</p>
+                  </div>
+                  <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+                    <p className="text-sm text-amber-600 font-semibold">Allergies</p>
+                    <p className="text-xl font-bold text-amber-700">{patientRecords.allergies}</p>
+                  </div>
+                  <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                    <p className="text-sm text-blue-600 font-semibold">Conditions</p>
+                    <p className="text-xl font-bold text-blue-700">{patientRecords.conditions}</p>
+                  </div>
+                  <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
+                    <p className="text-sm text-emerald-600 font-semibold">Last Visit</p>
+                    <p className="text-xl font-bold text-emerald-700">{patientRecords.lastVisit}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-lg text-slate-600">No record found.</p>
+              )}
+            </Section>
+
+            <Section title={<span className="flex items-center gap-3"><span className="text-5xl">🧪</span> Lab Reports</span>}>
+              <div className="space-y-4">
+                {patientLabs.map((item) => (
+                  <div key={item.id} className="rounded-2xl border-2 border-slate-200 p-5 hover:border-blue-300 hover:shadow-md transition-all">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-medium text-slate-900">{report.name}</p>
-                        <p className="text-sm text-slate-600">Uploaded: {report.uploadDate}</p>
-                        <p className="text-xs text-slate-500">
-                          Size: {(report.size / 1024).toFixed(1)} KB
-                        </p>
+                        <p className="font-bold text-xl text-slate-900">{item.test}</p>
+                        <p className="text-lg text-slate-600">📅 {item.date}</p>
+                        <p className="text-lg text-slate-600">📊 {item.result}</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <StatusPill value={report.status} />
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadReport(report)}
-                          className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 transition"
-                          title="Download Report"
-                        >
-                          📥 Download
-                        </button>
-                      </div>
+                      <StatusPill value={item.status} />
                     </div>
                   </div>
                 ))}
+                {patientLabs.length === 0 && (
+                  <p className="text-lg text-slate-500 text-center py-8">No lab reports available.</p>
+                )}
               </div>
-            </div>
-          )}
+            </Section>
 
-          {/* Upload Instructions */}
-          <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
-            <h5 className="text-sm font-semibold text-blue-900 mb-2">📤 Upload Medical Reports</h5>
-            <ul className="text-sm text-blue-800 space-y-1">
-              <li>• Upload lab results, imaging reports, or other medical documents</li>
-              <li>• Supported formats: PDF, JPG, PNG, DOC, DOCX</li>
-              <li>• Files will be reviewed by your healthcare provider</li>
-              <li>• Maximum file size: 10MB per document</li>
-            </ul>
+            <Section title={<span className="flex items-center gap-3"><span className="text-5xl">💊</span> Prescriptions</span>}>
+              <div className="space-y-4">
+                {patientPrescriptions.map((item) => (
+                  <div key={item.id} className="rounded-2xl border-2 border-slate-200 p-5 hover:border-purple-300 hover:shadow-md transition-all">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-xl text-slate-900">{item.medication}</p>
+                        <p className="text-lg text-slate-600">💉 {item.dosage}</p>
+                        <p className="text-lg text-slate-600">📋 {item.instructions}</p>
+                      </div>
+                      <StatusPill value={item.status} />
+                    </div>
+                  </div>
+                ))}
+                {patientPrescriptions.length === 0 && (
+                  <p className="text-lg text-slate-500 text-center py-8">No prescriptions available.</p>
+                )}
+              </div>
+            </Section>
           </div>
-        </div>
-      </Section>
+        )}
 
-      <Section title="My Prescriptions">
-        <div className="space-y-3">
-          {patientPrescriptions.map((item) => (
-            <div key={item.id} className="rounded-lg border border-slate-200 p-4 bg-white shadow-sm">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <p className="font-semibold text-lg text-slate-900">{item.medication}</p>
-                  <p className="text-xs text-slate-500">Prescribed by: {item.doctor} | Date: {item.date}</p>
-                  {item.diagnosis && <p className="text-xs text-slate-500">Diagnosis: {item.diagnosis}</p>}
-                </div>
-                <StatusPill value={item.status} />
+        {/* Reminders Section */}
+        {activeSection === 'reminders' && (
+          <Section title={<span className="flex items-center gap-3"><span className="text-5xl">🔔</span> Appointment Reminders</span>}>
+            {reminders.length === 0 ? (
+              <div className="text-center py-16">
+                <span className="text-6xl block mb-4">✅</span>
+                <p className="text-xl font-semibold text-slate-700">All caught up!</p>
+                <p className="text-slate-500">No upcoming appointments in the next 7 days.</p>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                <div>
-                  <p className="text-xs text-slate-500">Dosage</p>
-                  <p className="font-medium text-slate-900">{item.dosage}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Quantity</p>
-                  <p className="font-medium text-slate-900">{item.quantity}</p>
+            ) : (
+              <div className="space-y-4">
+                {reminders.map((apt) => (
+                  <div 
+                    key={apt.id} 
+                    className={`rounded-2xl border-2 p-6 transition-all ${
+                      apt.daysUntil === 0 ? 'border-red-300 bg-red-50' :
+                      apt.daysUntil === 1 ? 'border-amber-300 bg-amber-50' :
+                      'border-blue-300 bg-blue-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className={`px-4 py-1 rounded-full text-sm font-bold ${
+                            apt.daysUntil === 0 ? 'bg-red-500 text-white animate-pulse' :
+                            apt.daysUntil === 1 ? 'bg-amber-500 text-white' :
+                            'bg-blue-500 text-white'
+                          }`}>
+                            {apt.daysUntil === 0 ? '🔴 TODAY!' : apt.daysUntil === 1 ? '🟠 Tomorrow' : `🔵 In ${apt.daysUntil} days`}
+                          </span>
+                          <StatusPill value={apt.status} />
+                        </div>
+                        <p className="font-bold text-2xl text-slate-900">{apt.doctor}</p>
+                        <p className="text-lg text-slate-600 mt-1">📅 {apt.date} at ⏰ {apt.time}</p>
+                        <p className="text-lg text-slate-600">💬 {apt.reason}</p>
+                      </div>
+                      {apt.status === 'Approved' && (
+                        <button className="px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl hover:shadow-lg transition">
+                          📹 Prepare for Call
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Reminder Tips */}
+                <div className="mt-6 rounded-xl bg-slate-100 p-5">
+                  <h4 className="font-bold text-slate-900 mb-3">💡 Appointment Tips</h4>
+                  <ul className="space-y-2 text-slate-700">
+                    <li>✓ Test your camera and microphone before the call</li>
+                    <li>✓ Have your medication list ready</li>
+                    <li>✓ Write down questions you want to ask</li>
+                    <li>✓ Find a quiet, well-lit space</li>
+                  </ul>
                 </div>
               </div>
-              <div className="mb-3">
-                <p className="text-xs text-slate-500">Instructions</p>
-                <p className="text-sm text-slate-700">{item.instructions}</p>
-              </div>
-              {item.pharmacistNote && (
-                <div className="rounded-lg bg-blue-50 border border-blue-200 p-2">
-                  <p className="text-xs font-semibold text-blue-700">Pharmacist Notes:</p>
-                  <p className="text-sm text-blue-900">{item.pharmacistNote}</p>
-                </div>
-              )}
-            </div>
-          ))}
-          {patientPrescriptions.length === 0 && (
-            <p className="text-sm text-slate-500 text-center py-4">No prescriptions available.</p>
-          )}
-        </div>
-      </Section>
+            )}
+          </Section>
+        )}
+      </main>
     </div>
   );
 }

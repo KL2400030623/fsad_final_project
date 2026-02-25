@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNaviga
 import './App.css';
 import WorkspaceSummary from './components/WorkspaceSummary';
 import BrandLogo from './components/BrandLogo';
+import EmergencyCall from './components/EmergencyCall';
 import AdminPanel from './features/AdminPanel';
 import DoctorPanel from './features/DoctorPanel';
 import DoctorConsultations from './features/DoctorConsultations';
@@ -12,10 +13,17 @@ import PatientPanel from './features/PatientPanel';
 import PharmacistPanel from './features/PharmacistPanel';
 import AppointmentsPage from './pages/AppointmentsPage';
 import UsersPage from './pages/UsersPage';
-import PatientRegistrationPage from './pages/PatientRegistrationPage';
 import HomePage from './pages/HomePage';
+import DashboardAccessPortal from './pages/DashboardAccessPortal';
+import DashboardPortalPage from './pages/DashboardPortalPage';
+import LoginPage from './pages/LoginPage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
+import MedicinesPage from './pages/MedicinesPage';
+import InstantConsultPage from './pages/InstantConsultPage';
+import LabTestsPage from './pages/LabTestsPage';
+import ServicesPage from './pages/ServicesPage';
+import ProcessPage from './pages/ProcessPage';
 import {
   initialAppointments,
   initialLabReports,
@@ -172,6 +180,14 @@ function TopRightNav({ visible = true, isAuthenticated = false, authenticatedDas
               Dashboard
             </NavLink>
           )}
+          <NavLink
+            to="/dashboard-portal"
+            className={({ isActive }) => `rounded-xl px-6 py-3 text-xl font-bold transition ${
+              isActive ? 'bg-blue-500 text-white shadow-md' : 'bg-blue-400/90 text-white hover:bg-blue-500'
+            }`}
+          >
+            Portal
+          </NavLink>
           <NavLink
             to="/"
             onClick={(event) => {
@@ -410,7 +426,7 @@ function AppContent() {
     // If not authenticated and trying to access protected routes
     if (!isAuthenticated || !currentUser) {
       // Allow access to public routes (no login required)
-      if (currentPath === '/' || currentPath === '/login' || currentPath === '/register-patient' || currentPath === '/about' || currentPath === '/contact') {
+      if (currentPath === '/' || currentPath === '/login' || currentPath === '/register-patient' || currentPath === '/about' || currentPath === '/services' || currentPath === '/contact' || currentPath === '/process' || currentPath === '/medicines' || currentPath === '/medicine' || currentPath === '/lab-tests' || currentPath === '/instant-consult') {
         return;
       }
       // Redirect to login for any other route
@@ -708,28 +724,27 @@ function AppContent() {
     navigate(ROLE_PATHS.patient);
   };
 
-  const handleLogin = (event) => {
-    event.preventDefault();
-    if (!loginForm.email.trim() || !loginForm.password.trim()) {
+  // Helper function for authentication that works with both form-based and new LoginPage
+  const authenticateUser = (email, password) => {
+    if (!email.trim() || !password.trim()) {
       setLoginError('Enter both email and password.');
-      return;
+      return false;
     }
 
     let foundRole = null;
     let foundName = null;
-    let userEmail = loginForm.email.toLowerCase().trim();
+    let userEmail = email.toLowerCase().trim();
 
-    // Priority 1: Check individual user credentials (each staff member has own login)
+    // Priority 1: Check individual user credentials
     const userCred = userCredentials[userEmail];
-    if (userCred && userCred.password === loginForm.password) {
+    if (userCred && userCred.password === password) {
       foundRole = userCred.role;
       foundName = userCred.name;
       
-      // Check if user account is approved
       const userAccount = users.find(u => u.name === foundName && u.role === foundRole);
       if (userAccount && userAccount.status !== 'Active') {
         setLoginError('Your account is pending admin approval. Please contact the administrator.');
-        return;
+        return false;
       }
       
       setCurrentUser({ name: foundName, email: userEmail, role: foundRole });
@@ -738,53 +753,49 @@ function AppContent() {
     // Priority 2: Check legacy role credentials
     if (!foundRole) {
       for (const [role, credentials] of Object.entries(roleCredentials)) {
-        if (credentials.email === loginForm.email && credentials.password === loginForm.password) {
+        if (credentials.email === email && credentials.password === password) {
           foundRole = role;
           foundName = credentials.name;
           
-          // Check if user account is approved
           const userAccount = users.find(u => u.name === foundName && u.role === foundRole);
           if (userAccount && userAccount.status !== 'Active') {
             setLoginError('Your account is pending admin approval. Please contact the administrator.');
-            return;
+            return false;
           }
           
-          setCurrentUser({ name: foundName, email: loginForm.email, role: foundRole });
+          setCurrentUser({ name: foundName, email: email, role: foundRole });
           break;
         }
       }
     }
 
-    // Priority 3: Check stored role accounts (newly created accounts)
+    // Priority 3: Check stored role accounts
     if (!foundRole) {
       for (const [role, accounts] of Object.entries(roleAccounts)) {
         const matchedAccount = accounts.find(
-          (acc) => acc.email === loginForm.email && acc.password === loginForm.password
+          (acc) => acc.email === email && acc.password === password
         );
         if (matchedAccount) {
           foundRole = role;
           foundName = matchedAccount.name;
-          
-          // Check if user account is approved (newly created accounts are active by default)
-          setCurrentUser({ name: foundName, email: loginForm.email, role: foundRole });
+          setCurrentUser({ name: foundName, email: email, role: foundRole });
           break;
         }
       }
     }
 
-    // Priority 4: Check stored users list (newly registered patients)
+    // Priority 4: Check stored users list
     if (!foundRole) {
       const matchedUser = users.find(
-        (u) => u.email && u.email.toLowerCase() === userEmail && u.password === loginForm.password
+        (u) => u.email && u.email.toLowerCase() === userEmail && u.password === password
       );
       if (matchedUser) {
         foundRole = matchedUser.role;
         foundName = matchedUser.name;
         
-        // Check if user account is active
         if (matchedUser.status !== 'Active') {
           setLoginError('Your account is not active. Please contact administrator.');
-          return;
+          return false;
         }
         
         setCurrentUser({ name: foundName, email: userEmail, role: foundRole });
@@ -793,7 +804,7 @@ function AppContent() {
 
     if (!foundRole) {
       setLoginError('Invalid email or password. Please check your credentials.');
-      return;
+      return false;
     }
 
     setLoginError('');
@@ -806,7 +817,18 @@ function AppContent() {
     setLoginForm({ email: '', password: '' });
     setDetectedRole(null);
     
+    // Persist authentication state to localStorage
+    setStoredValue(STORAGE_KEYS.activeRole, foundRole);
+    setStoredValue(STORAGE_KEYS.currentUser, { name: foundName, email: userEmail, role: foundRole });
+    setStoredValue(STORAGE_KEYS.isAuthenticated, true);
+    
     navigate(ROLE_PATHS[foundRole]);
+    return true;
+  };
+
+  const handleLogin = (event) => {
+    event.preventDefault();
+    authenticateUser(loginForm.email, loginForm.password);
   };
 
   const handleSignup = (event) => {
@@ -887,6 +909,13 @@ function AppContent() {
   const handleLogout = () => {
     setIsAuthenticated(false);
     setCurrentUser(null);
+    setActiveRole('patient'); // Reset to default
+    
+    // Clear authentication state from localStorage
+    removeStoredValue(STORAGE_KEYS.isAuthenticated);
+    removeStoredValue(STORAGE_KEYS.currentUser);
+    removeStoredValue(STORAGE_KEYS.activeRole);
+    
     navigate('/');
   };
 
@@ -912,6 +941,8 @@ function AppContent() {
           onResetDemoData={resetDemoData}
           activeSection={activeAdminSection}
           setActiveSection={setActiveAdminSection}
+          appointments={appointments}
+          prescriptions={prescriptions}
         />
       )}
 
@@ -966,31 +997,25 @@ function AppContent() {
           doctors={staffByRole.doctor}
           setUsers={setUsers}
           users={users}
+          isAuthenticated={isAuthenticated}
         />
       );
     }
     
-    if (currentPath === '/register-patient') {
-      // Allow access to registration page without login
-      return (
-        <main className="min-h-screen bg-gradient-to-br from-slate-100 via-cyan-50 to-blue-100 px-4 pb-8 pt-28 text-slate-800 md:px-8">
-          <TopRightNav visible={showTopNav} />
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-            <header className="rounded-2xl bg-slate-900 p-6 text-white shadow-lg">
-              <h1 className="text-2xl font-bold md:text-3xl">Online Medical System</h1>
-              <p className="mt-2 text-sm text-slate-300">Patient Registration</p>
-            </header>
-
-            <PatientRegistrationPage
-              doctors={staffByRole.doctor}
-              setUsers={setUsers}
-              users={users}
-            />
-          </div>
-        </main>
-      );
+    if (currentPath === '/dashboard-access') {
+      return <DashboardAccessPortal />;
     }
-
+    
+    if (currentPath === '/dashboard-portal') {
+      return <DashboardAccessPortal />;
+    }
+    
+    if (currentPath === '/login') {
+      return <LoginPage onLogin={(credentials) => {
+        authenticateUser(credentials.email, credentials.password);
+      }} loginError={loginError} />;
+    }
+    
     if (currentPath === '/about') {
       return (
         <main className="min-h-screen bg-gradient-to-br from-slate-100 via-cyan-50 to-blue-100 px-4 pb-8 pt-28 text-slate-800 md:px-8">
@@ -1019,6 +1044,26 @@ function AppContent() {
           </div>
         </main>
       );
+    }
+
+    if (currentPath === '/medicines' || currentPath === '/medicine') {
+      return <MedicinesPage />;
+    }
+
+    if (currentPath === '/services') {
+      return <ServicesPage />;
+    }
+
+    if (currentPath === '/process') {
+      return <ProcessPage />;
+    }
+
+    if (currentPath === '/lab-tests') {
+      return <LabTestsPage />;
+    }
+
+    if (currentPath === '/instant-consult') {
+      return <InstantConsultPage />;
     }
 
     // Show login page for all other routes
@@ -1220,7 +1265,6 @@ function AppContent() {
                     }}
                     className="text-base text-cyan-600 font-bold hover:text-cyan-700 transition"
                   >
-                    ← Already have an account? Login
                   </button>
                 </div>
               </form>
@@ -1266,8 +1310,8 @@ function AppContent() {
           )}
         </header>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-[260px_1fr]">
-          {authenticatedRole !== 'doctor' && (
+        <div className={`mt-6 ${(authenticatedRole !== 'doctor' && authenticatedRole !== 'patient') ? 'grid gap-6 lg:grid-cols-[260px_1fr]' : ''}`}>
+          {authenticatedRole !== 'doctor' && authenticatedRole !== 'patient' && (
             <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Sidebar</h2>
               <nav className="mt-3 space-y-2">
@@ -1338,7 +1382,7 @@ function AppContent() {
             </aside>
           )}
 
-          <section className={`space-y-6 ${authenticatedRole === 'doctor' ? 'lg:col-span-2' : ''}`}>
+          <section className="space-y-6">
             {resetMessage && (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
                 {resetMessage}
@@ -1449,6 +1493,30 @@ function AppContent() {
             path="/contact"
             element={<ContactPage />}
           />
+          <Route
+            path="/medicines"
+            element={<MedicinesPage />}
+          />
+          <Route
+            path="/lab-tests"
+            element={<LabTestsPage />}
+          />
+          <Route
+            path="/services"
+            element={<ServicesPage />}
+          />
+          <Route
+            path="/process"
+            element={<ProcessPage />}
+          />
+          <Route
+            path="/instant-consult"
+            element={<InstantConsultPage />}
+          />
+          <Route
+            path="/medicine"
+            element={<Navigate to="/medicines" replace />}
+          />
           
           {/* Catch-all route - redirect to appropriate dashboard */}
           <Route path="*" element={<Navigate to={authenticatedDashboardPath} replace />} />
@@ -1456,6 +1524,7 @@ function AppContent() {
           </section>
         </div>
       </div>
+      <EmergencyCall />
     </main>
   );
 }

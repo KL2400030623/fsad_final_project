@@ -38,14 +38,7 @@ This project is a role-based virtual healthcare web application with four worksp
 
 ## Login Credentials
 
-**Important:** Each user has individual credentials. See [CREDENTIALS.md](./CREDENTIALS.md) for complete list.
-
-**Quick Test Accounts:**
-- **Admin:** admin@medical.com / admin123
-- **Doctor (Dr. Maya Patel):** maya.patel@medical.com / maya123
-- **Doctor (Dr. John Smith):** john.smith@medical.com / john123
-- **Patient (Alice Brown):** alice.brown@medical.com / alice123
-- **Pharmacist:** lena.kim@medical.com / lena123
+**Important:** Each staff member has individual credentials assigned by the system administrator. Contact your administrator for your login credentials.
 
 ## Run the App
 
