@@ -3,7 +3,7 @@ import Section from '../components/Section';
 import StatusPill from '../components/StatusPill';
 import { useNavigate } from 'react-router-dom';
 
-function PharmacistPanel({ prescriptions, pharmacistNotes, setPharmacistNotes, markDispensed }) {
+function PharmacistPanel({ currentUser, activeActor, prescriptions, pharmacistNotes, setPharmacistNotes, markDispensed }) {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
@@ -97,6 +97,8 @@ function PharmacistPanel({ prescriptions, pharmacistNotes, setPharmacistNotes, m
     ));
   };
 
+  const pharmacistName = currentUser?.name || activeActor?.pharmacist || 'Pharm. Lena Kim';
+
   return (
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
       {/* Pharmacist Sidebar */}
@@ -105,8 +107,8 @@ function PharmacistPanel({ prescriptions, pharmacistNotes, setPharmacistNotes, m
           <div className="w-20 h-20 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 mx-auto mb-3 flex items-center justify-center text-white text-3xl font-bold shadow-lg">
             💊
           </div>
-          <h3 className="font-bold text-xl text-slate-900">Pharmacy Portal</h3>
-          <p className="text-sm text-slate-500">Pharm. Lena Kim</p>
+          <h3 className="font-bold text-xl text-slate-900">{pharmacistName}</h3>
+          <p className="text-sm text-slate-500">Pharmacy Portal</p>
         </div>
         
         <nav className="space-y-2">

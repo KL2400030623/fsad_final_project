@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Section from '../components/Section';
 import StatusPill from '../components/StatusPill';
 import PatientAvailableDoctors from './PatientAvailableDoctors';
 
 function PatientPanel({
+  currentUser,
   handleBookAppointment,
   bookingForm,
   setBookingForm,
@@ -12,19 +13,34 @@ function PatientPanel({
   patientRecords,
   patientLabs = [],
   patientPrescriptions = [],
+  onRegisterSetActiveSection,
 }) {
   const [activeSection, setActiveSection] = useState('dashboard');
-  const [patientDetails] = useState({
-    fullName: 'Alice Brown',
-    dateOfBirth: '1985-06-15',
-    gender: 'Female',
-    phone: '+1-555-0123',
-    email: 'alice.brown@email.com',
-    address: '123 Main Street, City, State 12345',
-    emergencyContact: 'John Brown - +1-555-0124 (Spouse)',
-    insuranceProvider: 'HealthFirst Insurance',
-    insuranceNumber: 'HF-123456789',
-  });
+
+  // Register setActiveSection with parent so App can switch sections after booking
+  useEffect(() => {
+    if (onRegisterSetActiveSection) {
+      onRegisterSetActiveSection(setActiveSection);
+    }
+    return () => {
+      if (onRegisterSetActiveSection) {
+        onRegisterSetActiveSection(null);
+      }
+    };
+  }, [onRegisterSetActiveSection]);
+  
+  // Use real current user if available, otherwise fallback
+  const patientDetails = {
+    fullName: currentUser?.name || 'Alice Brown',
+    dateOfBirth: patientRecords?.dateOfBirth || 'Not specified',
+    gender: patientRecords?.gender || 'Not specified',
+    phone: currentUser?.contact || patientRecords?.phone || 'Not specified',
+    email: currentUser?.email || 'alice.brown@email.com',
+    address: patientRecords?.address || 'Not specified',
+    emergencyContact: patientRecords?.emergencyContact || 'Not specified',
+    insuranceProvider: patientRecords?.insuranceProvider || 'Not specified',
+    insuranceNumber: patientRecords?.insuranceNumber || 'Not specified',
+  };
 
   // Reminders based on upcoming appointments
   const reminders = useMemo(() => {

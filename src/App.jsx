@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import './App.css';
 import WorkspaceSummary from './components/WorkspaceSummary';
@@ -277,6 +277,8 @@ function AppContent() {
   const [newPrescription, setNewPrescription] = useState(defaultNewPrescription);
 
   const [consultationDrafts, setConsultationDrafts] = useState({});
+  // Ref-based callback so App can tell PatientPanel to switch sections
+  const patientSetActiveSectionRef = React.useRef(null);
   const [pharmacistNotes, setPharmacistNotes] = useState({});
   const [activeAdminSection, setActiveAdminSection] = useState('dashboard');
   const [activeDoctorSection, setActiveDoctorSection] = useState('consultations');
@@ -381,11 +383,65 @@ function AppContent() {
     }
   }, [platformSettings]);
 
+  // ===== BEGIN REAL BACKEND WIRING =====
+
+  // Helper to construct auth headers if user is logged in
+  const getAuthHeaders = () => {
+    return currentUser && currentUser.token
+      ? { 'Authorization': `Bearer ${currentUser.token}`, 'Content-Type': 'application/json' }
+      : { 'Content-Type': 'application/json' };
+  };
+
+  // Fetch ALL data from Spring Boot API on load
+  const fetchApiData = async () => {
+    if (!currentUser) {
+      // Not authenticated yet; skip protected fetches
+      return;
+    }
+    try {
+      // Fetch appointments - use patient/doctor specific endpoint when applicable
+      let apptUrl = 'http://localhost:8080/api/appointments';
+      if (currentUser.role === 'patient') {
+        apptUrl = `http://localhost:8080/api/appointments/patient/${encodeURIComponent(currentUser.name)}`;
+      } else if (currentUser.role === 'doctor') {
+        apptUrl = `http://localhost:8080/api/appointments/doctor/${encodeURIComponent(currentUser.name)}`;
+      }
+      const apptRes = await fetch(apptUrl, {
+        headers: getAuthHeaders(),
+      });
+      if (apptRes.ok) {
+        const apptData = await apptRes.json();
+        setAppointments(apptData);
+      }
+      
+      const presRes = await fetch('http://localhost:8080/api/prescriptions', {
+        headers: getAuthHeaders(),
+      });
+      if (presRes.ok) {
+        const presData = await presRes.json();
+        setPrescriptions(presData);
+      }
+    } catch (e) {
+      console.warn('Backend disconnected, viewing offline cache items', e);
+    }
+  };
+
+  useEffect(() => {
+    // Initial fetch on mount if already authenticated
+    if (currentUser) {
+      fetchApiData();
+    }
+    // Poll every 5 seconds when authenticated
+    const interval = setInterval(() => {
+      if (currentUser) fetchApiData();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
   useEffect(() => {
     const handleScroll = () => {
       setShowTopNav(window.scrollY <= 0);
     };
-
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
@@ -551,41 +607,73 @@ function AppContent() {
     currentUser ? item.patient === currentUser.name : item.patient === activeActor.patient
   );
 
-  const handleBookAppointment = (event) => {
+  const handleBookAppointment = async (event) => {
     event.preventDefault();
     if (!bookingForm.reason.trim()) {
       return;
     }
 
     const patientName = currentUser?.name || activeActor.patient;
-    const nextId = appointments.length + 1;
-    setAppointments((current) => [
-      ...current,
-      {
-        id: nextId,
+    const newApptPayload = {
         patient: patientName,
         doctor: bookingForm.doctor,
         date: bookingForm.date,
         time: bookingForm.time,
         reason: bookingForm.reason,
         status: 'Pending',
-        meetingLink: `https://telemed.example.com/room/${patientName.split(' ')[0]}${nextId}`,
+        meetingLink: `https://telemed.example.com/room/${patientName.split(' ')[0]}${Date.now()}`,
         consultationNote: '',
-      },
-    ]);
+    };
+
+    try {
+      const res = await fetch('http://localhost:8080/api/appointments', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(newApptPayload)
+      });
+      if (res.ok) {
+        const savedAppt = await res.json();
+        setAppointments((current) => [...current, savedAppt]);
+      } else {
+        throw new Error(`Server returned ${res.status}`);
+      }
+    } catch (e) {
+      console.error('Failed to book online', e);
+      // Fallback
+      const nextId = appointments.length ? Math.max(...appointments.map(a => a.id || 0)) + 1 : 1;
+      setAppointments((current) => [...current, { ...newApptPayload, id: nextId }]);
+    }
+
+    // Re-fetch from backend to ensure data is in sync
+    await fetchApiData();
 
     setBookingForm((current) => ({ ...current, reason: '' }));
+    // Switch PatientPanel to "My Appointments" tab via ref callback
+    if (patientSetActiveSectionRef.current) {
+      patientSetActiveSectionRef.current('appointments');
+    }
   };
 
-  const updateAppointmentStatus = (appointmentId, nextStatus) => {
+  const updateAppointmentStatus = async (appointmentId, nextStatus) => {
+    try {
+      const res = await fetch(`http://localhost:8080/api/appointments/${appointmentId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status: nextStatus })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setAppointments((current) => current.map((item) => (item.id === appointmentId ? updated : item)));
+        return;
+      }
+    } catch (e) {
+      console.error('API update failed', e);
+    }
+    
+    // Fallback UI update
     setAppointments((current) =>
       current.map((item) =>
-        item.id === appointmentId
-          ? {
-              ...item,
-              status: nextStatus,
-            }
-          : item
+        item.id === appointmentId ? { ...item, status: nextStatus } : item
       )
     );
   };
@@ -598,7 +686,7 @@ function AppContent() {
     updateAppointmentStatus(appointmentId, 'Rejected');
   };
 
-  const completeConsultation = (appointmentId) => {
+  const completeConsultation = async (appointmentId) => {
     const note = consultationDrafts[appointmentId]?.trim();
     if (!note) {
       return;
@@ -609,17 +697,21 @@ function AppContent() {
       return;
     }
 
-    setAppointments((current) =>
-      current.map((item) =>
-        item.id === appointmentId
-          ? {
-              ...item,
-              status: 'Completed',
-              consultationNote: note,
-            }
-          : item
-      )
-    );
+    try {
+      const res = await fetch(`http://localhost:8080/api/appointments/${appointmentId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status: 'Completed', consultationNote: note })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setAppointments((current) => current.map((item) => (item.id === appointmentId ? updated : item)));
+      }
+    } catch (e) {
+      console.error('API update failed', e);
+      // Fallback
+      setAppointments((current) => current.map((item) => item.id === appointmentId ? { ...item, status: 'Completed', consultationNote: note } : item));
+    }
 
     setRecords((current) =>
       current.map((record) =>
@@ -634,7 +726,7 @@ function AppContent() {
     );
   };
 
-  const createPrescription = (event) => {
+  const createPrescription = async (event) => {
     event.preventDefault();
     const { patient, diagnosis, medication, dosage, quantity, instructions } = newPrescription;
     if (!medication.trim() || !dosage.trim() || !instructions.trim() || !quantity) {
@@ -650,14 +742,9 @@ function AppContent() {
     const totalCost = medicationPrice.unitPrice * parseFloat(quantity);
 
     const doctorName = currentUser?.name || activeActor.doctor;
-    const prescriptionId = generatePrescriptionId();
-    setPrescriptions((current) => [
-      ...current,
-      {
-        id: prescriptionId,
+    
+    const newPrescPayload = {
         patient,
-        patientAge: patientRecord?.age || 'N/A',
-        patientContact: patientUser?.contact || 'N/A',
         doctor: doctorName,
         date: new Date().toISOString().split('T')[0],
         diagnosis,
@@ -669,8 +756,30 @@ function AppContent() {
         pharmacistNote: '',
         unitPrice: medicationPrice.unitPrice,
         totalCost: totalCost,
-      },
-    ]);
+        // UI-only properties that backend might ignore
+        patientAge: patientRecord?.age || 'N/A',
+        patientContact: patientUser?.contact || 'N/A',
+    };
+
+    try {
+      const res = await fetch('http://localhost:8080/api/prescriptions', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(newPrescPayload)
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setPrescriptions((current) => [...current, saved]);
+        setPrescriptionSuccessMessage(`Prescription saved to database successfully!`);
+      } else {
+        throw new Error(`Server returned ${res.status}`);
+      }
+    } catch (e) {
+      // Fallback
+      const fallbackId = generatePrescriptionId();
+      setPrescriptions((current) => [ ...current, { ...newPrescPayload, id: fallbackId } ]);
+      setPrescriptionSuccessMessage(`Prescription ${fallbackId} saved locally!`);
+    }
 
     setNewPrescription((current) => ({ 
       ...current, 
@@ -680,19 +789,31 @@ function AppContent() {
       quantity: 30,
       instructions: '' 
     }));
-    setPrescriptionSuccessMessage(`Prescription ${prescriptionId} saved successfully!`);
   };
 
-  const markDispensed = (prescriptionId) => {
+  const markDispensed = async (prescriptionId) => {
     const note = pharmacistNotes[prescriptionId] || '';
+    
+    try {
+      const res = await fetch(`http://localhost:8080/api/prescriptions/${prescriptionId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status: 'Dispensed', pharmacistNote: note })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setPrescriptions((current) => current.map((item) => (item.id === prescriptionId ? updated : item)));
+        return;
+      }
+    } catch (e) {
+      console.error('API update failed', e);
+    }
+    
+    // Fallback UI
     setPrescriptions((current) =>
       current.map((item) =>
         item.id === prescriptionId
-          ? {
-              ...item,
-              status: 'Dispensed',
-              pharmacistNote: note,
-            }
+          ? { ...item, status: 'Dispensed', pharmacistNote: note }
           : item
       )
     );
@@ -725,105 +846,130 @@ function AppContent() {
   };
 
   // Helper function for authentication that works with both form-based and new LoginPage
-  const authenticateUser = (email, password) => {
+  const authenticateUser = async (email, password) => {
     if (!email.trim() || !password.trim()) {
       setLoginError('Enter both email and password.');
       return false;
     }
 
-    let foundRole = null;
-    let foundName = null;
     let userEmail = email.toLowerCase().trim();
+    
+    try {
+      // Connect to Real Spring Boot API
+      const response = await fetch('http://localhost:8080/api/auth/signin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: userEmail,
+          password: password.trim()
+        })
+      });
 
-    // Priority 1: Check individual user credentials
-    const userCred = userCredentials[userEmail];
-    if (userCred && userCred.password === password) {
-      foundRole = userCred.role;
-      foundName = userCred.name;
-      
-      const userAccount = users.find(u => u.name === foundName && u.role === foundRole);
-      if (userAccount && userAccount.status !== 'Active') {
-        setLoginError('Your account is pending admin approval. Please contact the administrator.');
+      const data = await response.json();
+
+      if (!response.ok) {
+        setLoginError('Invalid email or password. Please check your credentials. Server says: ' + (data.message || 'Unauthorized'));
         return false;
       }
+
+      // Success! Use the backend data
+      const foundRole = data.role && data.role !== '' ? data.role : 'patient';
+      const foundName = data.name || userEmail.split('@')[0];
       
-      setCurrentUser({ name: foundName, email: userEmail, role: foundRole });
-    }
+      setLoginError('');
+      setActiveRole(foundRole);
+      setActiveActor((current) => ({
+        ...current,
+        [foundRole]: foundName,
+      }));
+      setIsAuthenticated(true);
+      setLoginForm({ email: '', password: '' });
+      setDetectedRole(null);
+      
+      // Persist authentication state to localStorage
+      const newCurrentUser = { name: foundName, email: userEmail, role: foundRole, token: data.token };
+      setCurrentUser(newCurrentUser);
+      setStoredValue(STORAGE_KEYS.activeRole, foundRole);
+      setStoredValue(STORAGE_KEYS.currentUser, newCurrentUser);
+      setStoredValue(STORAGE_KEYS.isAuthenticated, true);
+      
+      navigate(ROLE_PATHS[foundRole] || ROLE_PATHS.patient);
+      return true;
 
-    // Priority 2: Check legacy role credentials
-    if (!foundRole) {
-      for (const [role, credentials] of Object.entries(roleCredentials)) {
-        if (credentials.email === email && credentials.password === password) {
-          foundRole = role;
-          foundName = credentials.name;
-          
-          const userAccount = users.find(u => u.name === foundName && u.role === foundRole);
-          if (userAccount && userAccount.status !== 'Active') {
-            setLoginError('Your account is pending admin approval. Please contact the administrator.');
-            return false;
-          }
-          
-          setCurrentUser({ name: foundName, email: email, role: foundRole });
-          break;
-        }
-      }
-    }
+    } catch (error) {
+      console.warn('Backend API connection failed, falling back to mock UI state.', error);
+      
+      // ===== FALLBACK MOCK LOGIC (For offline demo only) =====
+      let foundRole = null;
+      let foundName = null;
 
-    // Priority 3: Check stored role accounts
-    if (!foundRole) {
-      for (const [role, accounts] of Object.entries(roleAccounts)) {
-        const matchedAccount = accounts.find(
-          (acc) => acc.email === email && acc.password === password
-        );
-        if (matchedAccount) {
-          foundRole = role;
-          foundName = matchedAccount.name;
-          setCurrentUser({ name: foundName, email: email, role: foundRole });
-          break;
-        }
-      }
-    }
-
-    // Priority 4: Check stored users list
-    if (!foundRole) {
-      const matchedUser = users.find(
-        (u) => u.email && u.email.toLowerCase() === userEmail && u.password === password
-      );
-      if (matchedUser) {
-        foundRole = matchedUser.role;
-        foundName = matchedUser.name;
-        
-        if (matchedUser.status !== 'Active') {
-          setLoginError('Your account is not active. Please contact administrator.');
-          return false;
-        }
-        
+      const userCred = userCredentials[userEmail];
+      if (userCred && userCred.password === password) {
+        foundRole = userCred.role;
+        foundName = userCred.name;
         setCurrentUser({ name: foundName, email: userEmail, role: foundRole });
       }
-    }
 
-    if (!foundRole) {
-      setLoginError('Invalid email or password. Please check your credentials.');
-      return false;
-    }
+      if (!foundRole) {
+        for (const [role, credentials] of Object.entries(roleCredentials)) {
+          if (credentials.email === email && credentials.password === password) {
+            foundRole = role;
+            foundName = credentials.name;
+            setCurrentUser({ name: foundName, email: email, role: foundRole });
+            break;
+          }
+        }
+      }
 
-    setLoginError('');
-    setActiveRole(foundRole);
-    setActiveActor((current) => ({
-      ...current,
-      [foundRole]: foundName,
-    }));
-    setIsAuthenticated(true);
-    setLoginForm({ email: '', password: '' });
-    setDetectedRole(null);
-    
-    // Persist authentication state to localStorage
-    setStoredValue(STORAGE_KEYS.activeRole, foundRole);
-    setStoredValue(STORAGE_KEYS.currentUser, { name: foundName, email: userEmail, role: foundRole });
-    setStoredValue(STORAGE_KEYS.isAuthenticated, true);
-    
-    navigate(ROLE_PATHS[foundRole]);
-    return true;
+      if (!foundRole) {
+        for (const [role, accounts] of Object.entries(roleAccounts)) {
+          const matchedAccount = accounts.find(
+            (acc) => acc.email === email && acc.password === password
+          );
+          if (matchedAccount) {
+            foundRole = role;
+            foundName = matchedAccount.name;
+            setCurrentUser({ name: foundName, email: email, role: foundRole });
+            break;
+          }
+        }
+      }
+
+      if (!foundRole) {
+        const matchedUser = users.find(
+          (u) => u.email && u.email.toLowerCase() === userEmail && u.password === password
+        );
+        if (matchedUser) {
+          foundRole = matchedUser.role;
+          foundName = matchedUser.name;
+          setCurrentUser({ name: foundName, email: userEmail, role: foundRole });
+        }
+      }
+
+      if (!foundRole) {
+        setLoginError('Invalid email or password. Please check your credentials.');
+        return false;
+      }
+
+      setLoginError('');
+      setActiveRole(foundRole);
+      setActiveActor((current) => ({
+        ...current,
+        [foundRole]: foundName,
+      }));
+      setIsAuthenticated(true);
+      setLoginForm({ email: '', password: '' });
+      setDetectedRole(null);
+      
+      setStoredValue(STORAGE_KEYS.activeRole, foundRole);
+      setStoredValue(STORAGE_KEYS.currentUser, { name: foundName, email: userEmail, role: foundRole });
+      setStoredValue(STORAGE_KEYS.isAuthenticated, true);
+      
+      navigate(ROLE_PATHS[foundRole]);
+      return true;
+    }
   };
 
   const handleLogin = (event) => {
@@ -964,6 +1110,7 @@ function AppContent() {
 
       {role === 'patient' && (
         <PatientPanel
+          currentUser={currentUser}
           handleBookAppointment={handleBookAppointment}
           bookingForm={bookingForm}
           setBookingForm={setBookingForm}
@@ -972,6 +1119,7 @@ function AppContent() {
           patientRecords={patientRecords}
           patientLabs={patientLabs}
           patientPrescriptions={patientPrescriptions}
+          onRegisterSetActiveSection={(setter) => { patientSetActiveSectionRef.current = setter; }}
         />
       )}
 
@@ -1017,33 +1165,11 @@ function AppContent() {
     }
     
     if (currentPath === '/about') {
-      return (
-        <main className="min-h-screen bg-gradient-to-br from-slate-100 via-cyan-50 to-blue-100 px-4 pb-8 pt-28 text-slate-800 md:px-8">
-          <TopRightNav visible={showTopNav} />
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-            <header className="rounded-2xl bg-slate-900 p-6 text-white shadow-lg">
-              <h1 className="text-2xl font-bold md:text-3xl">Online Medical System</h1>
-              <p className="mt-2 text-sm text-slate-300">About</p>
-            </header>
-            <AboutPage />
-          </div>
-        </main>
-      );
+      return <AboutPage />;
     }
 
     if (currentPath === '/contact') {
-      return (
-        <main className="min-h-screen bg-gradient-to-br from-slate-100 via-cyan-50 to-blue-100 px-4 pb-8 pt-28 text-slate-800 md:px-8">
-          <TopRightNav visible={showTopNav} />
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-            <header className="rounded-2xl bg-slate-900 p-6 text-white shadow-lg">
-              <h1 className="text-2xl font-bold md:text-3xl">Online Medical System</h1>
-              <p className="mt-2 text-sm text-slate-300">Contact</p>
-            </header>
-            <ContactPage />
-          </div>
-        </main>
-      );
+      return <ContactPage />;
     }
 
     if (currentPath === '/medicines' || currentPath === '/medicine') {

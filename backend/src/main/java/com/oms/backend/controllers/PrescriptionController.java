@@ -34,13 +34,16 @@ public class PrescriptionController {
   }
 
   @PutMapping("/{id}")
-  public ResponseEntity<Prescription> updatePrescription(@PathVariable("id") long id, @RequestBody Prescription details) {
+  public ResponseEntity<Prescription> updatePrescription(@PathVariable("id") long id,
+      @RequestBody Prescription details) {
     Optional<Prescription> data = prescriptionRepository.findById(id);
 
     if (data.isPresent()) {
       Prescription _pres = data.get();
-      if(details.getStatus() != null) _pres.setStatus(details.getStatus());
-      if(details.getPharmacistNote() != null) _pres.setPharmacistNote(details.getPharmacistNote());
+      if (details.getStatus() != null)
+        _pres.setStatus(details.getStatus());
+      if (details.getPharmacistNote() != null)
+        _pres.setPharmacistNote(details.getPharmacistNote());
       return ResponseEntity.ok(prescriptionRepository.save(_pres));
     } else {
       return ResponseEntity.notFound().build();
@@ -49,6 +52,6 @@ public class PrescriptionController {
 
   @GetMapping("/patient/{name}")
   public List<Prescription> getPrescriptionsByPatient(@PathVariable String name) {
-     return prescriptionRepository.findByPatient(name);
+    return prescriptionRepository.findByPatient(name);
   }
 }

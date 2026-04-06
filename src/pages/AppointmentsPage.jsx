@@ -36,7 +36,7 @@ function AppointmentsPage({ appointments, onCompleteConsultation, consultationDr
                     <td className="px-4 py-3">{appt.time}</td>
                     <td className="px-4 py-3">{appt.reason}</td>
                     <td className="px-4 py-3">
-                      <StatusPill status={appt.status} />
+                      <StatusPill value={appt.status} />
                     </td>
                     <td className="px-4 py-3">
                       {appt.meetingLink && (

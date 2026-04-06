@@ -1,4 +1,8 @@
+import { useNavigate } from 'react-router-dom';
+import BrandLogo from '../components/BrandLogo';
+
 function AboutPage() {
+  const navigate = useNavigate();
   const companyValues = [
     { icon: '💙', title: 'Patient-First', description: 'Every decision centered on patient wellbeing' },
     { icon: '🔒', title: 'Security', description: 'Enterprise-grade encryption and compliance' },
@@ -14,10 +18,24 @@ function AboutPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-blue-50 py-12">
-      <div className="mx-auto max-w-7xl px-6 lg:px-8 space-y-20">
-        
-        {/* Header */}
+    <main className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-blue-50">
+      {/* Fixed Navigation */}
+      <section className="sticky top-0 z-50 border-b border-indigo-200 bg-white/95 shadow-lg backdrop-blur-md">
+        <div className="mx-auto max-w-7xl flex items-center justify-between gap-6 px-6 py-5 lg:px-8">
+          <button onClick={() => navigate('/')} className="cursor-pointer">
+            <BrandLogo />
+          </button>
+          <div className="flex items-center justify-end gap-4 md:gap-8">
+            <button onClick={() => navigate('/')} className="rounded-lg px-4 py-2 font-semibold text-slate-700 transition hover:bg-slate-100">Home</button>
+            <button onClick={() => navigate('/about')} className="rounded-lg px-4 py-2 font-semibold text-white bg-blue-600 rounded-full">About</button>
+            <button onClick={() => navigate('/services')} className="rounded-lg px-4 py-2 font-semibold text-slate-700 transition hover:bg-slate-100">Services</button>
+            <button onClick={() => navigate('/contact')} className="rounded-lg px-4 py-2 font-semibold text-slate-700 transition hover:bg-slate-100">Contact</button>
+            <button onClick={() => navigate('/login')} className="rounded-lg px-4 py-2 font-semibold text-white bg-slate-900 transition hover:bg-slate-800">Sign In</button>
+          </div>
+        </div>
+      </section>
+
+      <div className="mx-auto max-w-7xl px-6 lg:px-8 py-12 space-y-20">
         <section className="space-y-6 pt-12">
           <h1 className="text-4xl md:text-5xl font-bold text-slate-900">About Our Platform</h1>
           <p className="text-lg text-slate-600 max-w-4xl">
@@ -139,7 +157,7 @@ function AboutPage() {
           <p className="text-lg opacity-90">Join thousands of patients and healthcare professionals today</p>
         </section>
       </div>
-    </div>
+    </main>
   );
 }
 

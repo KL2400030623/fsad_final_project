@@ -704,7 +704,7 @@ function PatientRegistrationPage({ doctors, setUsers, users, embedded = false })
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     // Get stored users from localStorage
@@ -732,16 +732,6 @@ function PatientRegistrationPage({ doctors, setUsers, users, embedded = false })
       alert('⚠️ Password must be at least 8 characters long.');
       return;
     }
-    
-    // Check for duplicate email
-    const emailExists = storedUsers.some(u => 
-      u.email && u.email.toLowerCase() === patientEmail
-    );
-    
-    if (emailExists) {
-      alert('⚠️ This email is already registered. Please use a different email or login.');
-      return;
-    }
 
     // Check if fields are filled
     if (!formData.firstName.trim() || !formData.lastName.trim() || !patientEmail) {
@@ -749,60 +739,88 @@ function PatientRegistrationPage({ doctors, setUsers, users, embedded = false })
       return;
     }
     
-    // Create new patient user object with user-provided password
-    const newPatient = {
-      id: Date.now(),
-      name: `${formData.firstName} ${formData.lastName}`,
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      role: 'patient',
-      status: 'Active',
-      contact: formData.phone,
-      email: patientEmail,
-      password: password, // Store the user's own password
-      dateOfBirth: formData.dateOfBirth,
-      gender: formData.gender,
-      bloodType: formData.bloodType,
-      address: formData.address,
-      city: formData.city,
-      state: formData.state,
-      zipCode: formData.zipCode,
-    };
-
-    // Add new patient to users list and save to localStorage
-    const updatedUsers = [...storedUsers, newPatient];
     try {
-      localStorage.setItem('users', JSON.stringify(updatedUsers));
-    } catch (error) {
-      console.error('Failed to save users to localStorage:', error);
-      alert('⚠️ Error saving registration. Please try again.');
-      return;
-    }
+      // Connect to Real Spring Boot API
+      const response = await fetch('http://localhost:8080/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: `${formData.firstName} ${formData.lastName}`.trim(),
+          email: patientEmail,
+          password: password,
+          contact: formData.phone,
+          role: 'patient'
+        })
+      });
 
-    // Also update the React state
-    setUsers(updatedUsers);
-    
-    // Auto-login the newly registered patient
-    try {
-      localStorage.setItem('currentUser', JSON.stringify({
-        name: newPatient.name,
-        email: patientEmail,
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert('⚠️ ' + (data.message || 'Error: Could not register user on server.'));
+        return;
+      }
+
+      // Add new patient to users list and save to localStorage (Fallback mock state for UI)
+      const newPatient = {
+        id: Date.now(),
+        name: `${formData.firstName} ${formData.lastName}`,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
         role: 'patient',
+        email: patientEmail,
         password: password,
-      }));
-      localStorage.setItem('isAuthenticated', JSON.stringify(true));
-      localStorage.setItem('activeRole', JSON.stringify('patient'));
+        dateOfBirth: formData.dateOfBirth,
+        gender: formData.gender,
+      };
+
+      const updatedUsers = [...storedUsers, newPatient];
+      try {
+        localStorage.setItem('users', JSON.stringify(updatedUsers));
+        setUsers(updatedUsers);
+      } catch (error) {}
+      
+      // Auto-login: Get real auth token from backend
+      let authToken = null;
+      try {
+        const loginRes = await fetch('http://localhost:8080/api/auth/signin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: patientEmail, password: password })
+        });
+        if (loginRes.ok) {
+          const loginData = await loginRes.json();
+          authToken = loginData.token;
+        }
+      } catch (e) {
+        console.warn('Backend auto-login failed. Functioning locally.', e);
+      }
+      
+      // Auto-login the newly registered patient
+      try {
+        localStorage.setItem('currentUser', JSON.stringify({
+          name: newPatient.name,
+          email: patientEmail,
+          role: 'patient',
+          token: authToken, // Include the token for API requests
+        }));
+        localStorage.setItem('isAuthenticated', JSON.stringify(true));
+        localStorage.setItem('activeRole', JSON.stringify('patient'));
+      } catch (error) {}
+      
+      // Show success message and redirect to dashboard
+      setShowSuccess(true);
+      
+      // Redirect after a short delay to show success message
+      setTimeout(() => {
+        navigate('/patient/dashboard', { replace: true });
+      }, 1500);
+
     } catch (error) {
-      console.error('Failed to save to localStorage:', error);
+      console.error('API Error:', error);
+      alert('⚠️ Failed to connect to backend server. Make sure Spring Boot is running on port 8080.');
     }
-    
-    // Show success message and redirect to dashboard
-    setShowSuccess(true);
-    
-    // Redirect after a short delay to show success message
-    setTimeout(() => {
-      navigate('/patient/dashboard', { replace: true });
-    }, 1500);
   };
 
   return (
@@ -822,8 +840,6 @@ function PatientRegistrationPage({ doctors, setUsers, users, embedded = false })
             <p><span className="mr-2 text-indigo-600">✓</span>All fields marked with * are required</p>
             <p><span className="mr-2 text-sky-600">✓</span>Your information is encrypted and secure</p>
             <p><span className="mr-2 text-cyan-600">✓</span>You can update your details anytime after registration</p>
-            <p><span className="mr-2 text-indigo-600">✓</span>Select a preferred doctor to see their availability</p>
-            <p><span className="mr-2 text-sky-600">✓</span>Describe your current health condition in detail</p>
           </div>
         </section>
       </div>
@@ -900,31 +916,7 @@ function PatientRegistrationPage({ doctors, setUsers, users, embedded = false })
                       <option value="AB-">AB-</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('preferredLanguage')}</label>
-                    <select
-                      required
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      value={formData.preferredLanguage}
-                      onChange={(e) => handleInputChange('preferredLanguage', e.target.value)}
-                    >
-                      <option value="">{t('selectLanguage')}</option>
-                      <option value="English">English</option>
-                      <option value="Spanish">Spanish</option>
-                      <option value="French">French</option>
-                      <option value="German">German</option>
-                      <option value="Mandarin Chinese">Mandarin Chinese</option>
-                      <option value="Hindi">Hindi</option>
-                      <option value="Arabic">Arabic</option>
-                      <option value="Portuguese">Portuguese</option>
-                      <option value="Russian">Russian</option>
-                      <option value="Japanese">Japanese</option>
-                      <option value="Telugu">Telugu</option>
-                      <option value="Tamil">Tamil</option>
-                      <option value="Bengali">Bengali</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
+
                 </div>
               </div>
 
@@ -981,110 +973,7 @@ function PatientRegistrationPage({ doctors, setUsers, users, embedded = false })
                 </div>
               </div>
 
-              {/* Medical Information */}
-              <div>
-                <h3 className="mb-3 text-lg font-semibold text-slate-800">{t('medicalInformation')}</h3>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('diseaseQuestion')}</label>
-                  <textarea
-                    rows="4"
-                    required
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder={t('diseasePlaceholder')}
-                    value={formData.currentDisease}
-                    onChange={(e) => handleInputChange('currentDisease', e.target.value)}
-                  />
-                  
-                  {/* Doctor Suggestions Based on Disease */}
-                  {suggestedDoctors.length > 0 && (
-                    <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
-                      <p className="text-sm font-semibold text-blue-900 mb-2">
-                        💡 Suggested Doctors for Your Condition:
-                      </p>
-                      <div className="space-y-2">
-                        {suggestedDoctors.map((suggestion, idx) => (
-                          <div
-                            key={idx}
-                            className="rounded-lg border border-blue-300 bg-white p-3 cursor-pointer hover:bg-blue-50 transition"
-                            onClick={() => {
-                              setFormData({ ...formData, preferredDoctor: suggestion.doctorName });
-                              setSelectedDoctorSchedule(suggestion.info);
-                            }}
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <p className="font-semibold text-slate-800 text-sm">{suggestion.doctorName}</p>
-                                <p className="text-xs text-blue-600 font-medium">{suggestion.info.specialty}</p>
-                                <p className="text-xs text-slate-600">{suggestion.info.specialization}</p>
-                                {suggestion.matchingConditions.length > 0 && (
-                                  <div className="mt-1 flex flex-wrap gap-1">
-                                    {suggestion.matchingConditions.map((condition, idx) => (
-                                      <span
-                                        key={idx}
-                                        className="inline-block bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded"
-                                      >
-                                        ✓ {condition}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                              <button
-                                type="button"
-                                className="ml-2 rounded-lg bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setFormData({ ...formData, preferredDoctor: suggestion.doctorName });
-                                  setSelectedDoctorSchedule(suggestion.info);
-                                }}
-                              >
-                                Select
-                              </button>
-                            </div>
-                            <p className="text-xs text-slate-500 mt-1">
-                              Next available: {suggestion.info.nextAvailable}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
 
-              {/* Preferred Doctor */}
-              <div>
-                <h3 className="mb-3 text-lg font-semibold text-slate-800">{t('doctorPreference')}</h3>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('preferredDoctor')}</label>
-                  <select
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    value={formData.preferredDoctor}
-                    onChange={(e) => {
-                      handleInputChange('preferredDoctor', e.target.value);
-                      setSelectedDoctorSchedule(e.target.value ? doctorAvailability[e.target.value] : null);
-                    }}
-                  >
-                    <option value="">{t('selectDoctor')}</option>
-                    {doctors.map((doctor) => (
-                      <option key={doctor} value={doctor}>
-                        {doctor}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedDoctorSchedule && (
-                    <div className="mt-2 rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm">
-                      <p className="font-semibold text-blue-900">{selectedDoctorSchedule.specialty}</p>
-                      <p className="text-xs text-blue-700 mb-2">{selectedDoctorSchedule.specialization}</p>
-                      <div className="mb-2">
-                        <p className="text-xs font-semibold text-blue-800 mb-1">Treats:</p>
-                        <p className="text-xs text-blue-600">{selectedDoctorSchedule.treatsConditions.join(', ')}</p>
-                      </div>
-                      <p className="text-blue-800 font-medium">⏰ Next Available: {selectedDoctorSchedule.nextAvailable}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
 
               <button
                 type="submit"
@@ -1096,57 +985,6 @@ function PatientRegistrationPage({ doctors, setUsers, users, embedded = false })
           </Section>
         </div>
       </div>
-
-      <Section title="Available Doctors & Specialists">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {Object.entries(doctorAvailability).map(([doctorName, info]) => (
-            <div
-              key={doctorName}
-              className="rounded-lg border border-slate-200 bg-white p-4 hover:shadow-md transition"
-            >
-              <div className="flex items-start justify-between mb-2">
-                <h4 className="font-semibold text-slate-800">{doctorName}</h4>
-                <span className="text-xs font-medium text-yellow-600">⭐ {info.rating}</span>
-              </div>
-              <p className="text-sm font-semibold text-blue-600 mb-1">{info.specialty}</p>
-              <p className="text-xs text-slate-600 mb-2">{info.specialization}</p>
-              <p className="text-xs text-slate-500 mb-2">Experience: {info.experience}</p>
-              
-              <div className="mb-2">
-                <p className="text-xs font-semibold text-slate-700 mb-1">Treats:</p>
-                <div className="flex flex-wrap gap-1">
-                  {info.treatsConditions.map((condition, idx) => (
-                    <span
-                      key={idx}
-                      className="inline-block bg-green-50 text-xs text-green-700 px-2 py-0.5 rounded"
-                    >
-                      {condition}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="mb-2 pt-2 border-t border-slate-100">
-                <p className="text-xs font-semibold text-slate-700 mb-1">Availability:</p>
-                {info.availability.map((slot, idx) => (
-                  <span
-                    key={idx}
-                    className="inline-block bg-slate-100 text-xs text-slate-700 px-2 py-1 rounded mr-1 mb-1"
-                  >
-                    {slot}
-                  </span>
-                ))}
-              </div>
-              
-              <div className="pt-2 border-t border-slate-100">
-                <p className="text-xs font-medium text-green-600">
-                  ⏰ Next Available: {info.nextAvailable}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Section>
     </div>
   );
 }
